@@ -62,6 +62,8 @@ class MainWindow(QMainWindow):
         self.search_field.setPlaceholderText("Поиск по названию")
         self.search_field.setStyleSheet("padding: 10px; border: 1px solid #ccc; border-radius: 5px;")
         layout.addWidget(self.search_field)
+        
+        self.search_field.textChanged.connect(self.filterData)
 
         button_layout = QHBoxLayout()
 
