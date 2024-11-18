@@ -1,6 +1,5 @@
 import sys
-import asyncio
-import aiohttp
+import requests
 import sqlite3
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QVBoxLayout, QWidget,
@@ -14,21 +13,20 @@ class DataLoader(QThread):
     progress = pyqtSignal(int)
     finished = pyqtSignal(list)
 
-    async def fetch_data(self):
-        async with aiohttp.ClientSession() as session:
-            async with session.get("https://jsonplaceholder.typicode.com/posts") as response:
-                return await response.json()
-
     def run(self):
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        data = loop.run_until_complete(self.fetch_data())
-        for i in range(1, 11):
+        # Синхронная загрузка данных с использованием requests
+        response = requests.get("https://jsonplaceholder.typicode.com/posts")
+        data = response.json()
+        
+        # Эмуляция загрузки с обновлением индикатора прогресса до 50%
+        for i in range(1, 6):
             self.progress.emit(i * 10)
-            self.msleep(200)
+            self.msleep(800)  # Эмуляция задержки
+        
         self.finished.emit(data)
 
 class DataSaver(QThread):
+    progress = pyqtSignal(int)
     finished = pyqtSignal()
 
     def __init__(self, data):
@@ -37,6 +35,7 @@ class DataSaver(QThread):
         self.db_path = 'posts.db'
 
     def run(self):
+        # Сохранение данных в базу
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         cursor.execute('''
@@ -47,9 +46,17 @@ class DataSaver(QThread):
                 body TEXT
             )
         ''')
+        
+        # Запись данных в базу
         cursor.executemany('''
             INSERT OR REPLACE INTO posts (id, user_id, title, body) VALUES (?, ?, ?, ?)
         ''', [(post['id'], post['userId'], post['title'], post['body']) for post in self.data])
+
+        # Простой эмулятор прогресса для сохранения (50-100%)
+        for i in range(6, 11):
+            self.progress.emit(i * 10)
+            self.msleep(800)  # Эмуляция задержки
+        
         conn.commit()
         conn.close()
         self.finished.emit()
@@ -84,10 +91,10 @@ class MainWindow(QMainWindow):
         self.progress_bar.setFixedHeight(self.load_button.sizeHint().height())
 
         header = self.table_widget.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # ID
-        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)  # User ID
-        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)  # Title
-        header.setSectionResizeMode(3, QHeaderView.Stretch)  # Body (растягивается)
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)  
+        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)  
+        header.setSectionResizeMode(3, QHeaderView.Stretch)
 
         self.is_loading = False
         self.timer = QTimer(self)
@@ -115,6 +122,7 @@ class MainWindow(QMainWindow):
         self.status_label.setText("Статус: Сохранение...")
 
         self.data_saver = DataSaver(data)
+        self.data_saver.progress.connect(self.update_progress)
         self.data_saver.finished.connect(self.finish_loading)
         self.data_saver.start()
 
